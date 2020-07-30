@@ -1,0 +1,37 @@
+<link rel='stylesheet' href="../../css/style.css">
+<h2>Hitchhiker</h2>
+<div class="masonry-brick" id="chat">
+
+</div>
+
+<div id="mainDiv">
+
+<div id="guideTools">
+	
+<div class="masonry-brick" id="actions">
+	
+
+</div>
+</div>
+
+
+</div>
+<div class="masonry-brick"  id="roomManagement">
+		<p id="roomMessage"></p>
+		<button id='guide'>Guide</button>
+		<button id='audience'>Audience</button><br>
+		<button id='reset'>Reconnect</button>
+
+		<p id="errorMsg"></p>
+		<p id="currentRoom"><strong>Currently <em>guest</em> in <em>lobby</em>. Click  'Audience' and select a room to join the performance.</strong></p>
+</div>
+<script>if (typeof module === 'object') {window.module = module; module = undefined;}</script>
+
+<script src="../../js/jquery-3.3.1.js"></script>
+<script src='../../js/socket.io.js'></script>
+<script src='../modules/guideActions.js'></script>
+<script src='../modules/chat.js'></script>
+<script src='popup.js'></script>
+
+
+<script>if (window.module) module = window.module;</script>

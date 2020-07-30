@@ -1,0 +1,538 @@
+
+const { ipcRenderer } = require('electron')
+const path = require('path')
+const Store = require('electron-store')
+let store = new Store();
+let USER = store.store;
+store.onDidAnyChange(function(){USER = store.store})
+let $,p5;
+window.onload = () => {
+	window.hello = "hi"
+	$ = require("../../js/jquery-3.3.1.js")
+	p5 = require("../../js/p5.min.js")
+	console.log(__dirname)
+	console.log($)
+	console.log("jquery loaded")
+	let stylesheet = path.join(__dirname,'injectStyle.css')
+	console.log(stylesheet)
+	$(document).ready(function(){
+		bindJQueryEvents();
+		$('head').append('<link rel="stylesheet" type="text/css" href="'+stylesheet+'>');
+	})
+	sendStatus("Currently on " + window.location)
+	store.set("currentURL", window.location)
+	let onMoveMultiMouse = function(userId,x,y){
+		if(userId != USER.id){
+			if($('#'+userId).length < 1){
+				let cursorImg = $('<img />').attr('src', loadAsset("cursor.png")).attr('id', userId).css({top:y*document.body.scrollHeight,left:x*document.body.scrollWidth}).addClass('multiMouse')
+				$('body').prepend(cursorImg)
+			} else {
+				$('#'+userId).css({top:y*document.body.scrollHeight, left:x*document.body.scrollWidth})
+			}
+		}
+	}
+}
+ipcRenderer.on('hello-webview', (e, data) => {
+	console.log(data)
+	console.log(e)
+	e.returnValue = 'pong from webview'
+})
+
+
+console.log(window.location)
+ipcRenderer.send('marco-webview', 'polo')
+console.log('hello from webview consolelog')
+
+var guide = store.get('role') === 'guide';
+var currentEl;
+var currentText = "";
+var originalText = "";
+var elType = "";
+var elPath;
+var contentChanges = [];
+var graffiti = false;
+var groupEdit = false;
+var clearEditBorder;
+var drawingCanvas;
+var urlList;
+var multiMouseToggle = false;
+setTimeout(siteSpecific, 3000);
+urlList = store.get('performances')[store.get('currentPerformance')].urlList;
+
+ipcRenderer.on('all', (e,message) => {
+	//console.log(message)
+	if(message.changeText){
+		changeText(message.changeText)
+	}
+	if(message.newURL){
+		window.location = message.newURL
+		console.log(message.newURL)
+	}
+	if(message.type == "changeText"){
+		changeText(message.text)
+		speakText(message.text)
+	}
+	if(message.newMsg){
+		addChatBubble(message.newMsg.username, message.newMsg.msg, message.newMsg.color)
+	}
+	if(message.type == "click"){
+		console.log("Guide clicked at " +message.x+","+message.y)
+		var $clickEl = $(message.elPath)
+		if(checkWebAddress("gutenberg.org")){
+			$('.mildEditBorder').removeClass('mildEditBorder')
+			$clickEl.addClass('mildEditBorder')
+		} else{
+			if(!groupEdit) $('.beingEdited').removeClass('beingEdited')
+			$clickEl.addClass('beingEdited')
+		}
+		//var offset = $clickEl.offset()
+		// var $clickCircle = $("<img id='clickCircle' style='position:absolute; z-index:99999; width:200px; left:"+(offset.left) +"px; top:"+(offset.top)+"px' src='"+chrome.runtime.getURL("assets/clickCircle.gif")+"' />")
+		// var $clickCircle = $("<img id='clickCircle' style='position:absolute; z-index:99999; width:200px; left:"+message.x+"px; top:"+message.y+"px' src='"+chrome.runtime.getURL("assets/clickCircle.gif")+"' />")
+		// console.log($clickCircle)
+		// $('body').append($clickCircle)
+		// $clickCircle.fadeOut(1500, function(){$(this).remove()})
+		// $('body').append("<img style='position:absolute; left:"+message.x+"; top:"+message.y+"' src='"+chrome.runtime.getURL("assets/clickCircle.gif")+"' />")
+
+		//$('body').append("<img src='"+chrome.extension.getURL("assets/clickCircle.gif")+"' />")
+		//$('body').append("<img src='"+chrome.runtime.getURL("assets/clickCircle.gif")+"' />")
+	}
+	if(message.type == "graffiti"){
+		if(message.originalText !== originalText || message.elType !== elType){
+			originalText = message.originalText
+			elType = message.elType
+			//currentEl = $(message.elPath)
+			// currentEl = $(message.elType+":contains("+message.originalText+")")
+		}
+		$(message.elPath).text(message.currentText);
+	}
+	if(message.type == "removeEditBorder"){
+		$(message.elPath).removeClass("beingEdited")
+	}
+	if(message.type == "graffitiToggle"){
+		graffiti = !graffiti;
+	}
+	if(message.type == "toggleGroupEdit"){
+		graffiti = groupEdit
+		graffiti = !graffiti;
+		groupEdit = !groupEdit
+	}
+	if(message.type == "toggleDrawing"){
+		console.log("drawing on")
+		toggleDrawing()
+	}
+	if(message.type == "mouseDraw"){
+		console.log("mousedraw received")
+		drawingCanvas.newDrawing(message)
+	}
+	if(message.type == "multiGif"){
+		multiGif(message.src, message.remove)
+	}
+	if(message.type == "playSound"){
+		var audio = new Audio(message.src);
+		audio.play()
+	}
+	if(message.type == "topSites"){
+		window.location = message.url;
+	}
+	if(message.type == "dance"){
+		dance()
+	}
+	if(message.type == "stopAnimation"){
+		stopAnimation()
+	}
+
+
+	if(message.type == "scrollSync" && !guide){
+		$(window).scrollTop(message.scroll);
+		console.log("scroll syncing")
+	}
+	if(message.type == "runFunction"){
+		var fn = window[message.fn]
+		if (typeof fn === "function") fn.apply(null, message.params);
+	}
+	else if(message.type && message.params){
+		console.log(message.type)
+		let func = window[message.type];
+		console.log(func)
+		if(typeof func == "function") func.apply(null, message.params)
+	}
+	if(message.type && message.type != "status"){
+		ipcRenderer.send('socketEvent', {socketEvent:"status", data:{msg:message.type + " running"}})
+	}
+})
+
+function bindJQueryEvents() {
+	if(guide){$('title').text("[HitchHiker] "+ $('title').text())}
+	$('*').click(function(e){
+		if(graffiti && (guide||groupEdit)){
+			var allowClick = true;
+			console.log(e)
+			if(currentEl !== e.target){
+				allowClick = false;
+				relay({type:"removeEditBorder", elPath:elPath})
+				currentEl = e.target
+				currentText = ""
+				contentChanges = [];
+				originalText = e.target.textContent
+				elType = e.target.localName
+				elPath = $(currentEl).getPath()
+				console.log(currentEl)
+				console.log($(currentEl).getPath())
+		
+			}
+			relay({"type": "click", "x":e.pageX, "y":e.pageY, "elPath":elPath})
+			return allowClick
+		}
+
+	})
+
+	$(document).keydown(function(e){
+		if(e.shiftKey && e.key==" "){
+
+			toggleChatInput();
+			console.log("togglingChat")
+		}
+		if(guide){
+			if(e.ctrlKey && e.which == 37){
+				prevWebsite()
+			}
+			else if(e.ctrlKey && e.which == 39){
+				nextWebsite()
+			}
+			else if(e.ctrlKey && e.which == 40){
+				addWebsite()
+			}
+		}
+		if(graffiti && (guide||groupEdit) && $('#chatInput').length < 1){
+			console.log(currentEl)
+			e.preventDefault()
+			// if(e.ctrlKey && e.which == 86){
+			// 	contentChanges.push($(currentEl).text())
+			// 	navigator.clipboard.readText().then(clipText => currentEl.innerText = currentText = clipText);
+			// }
+			if(currentEl && e.ctrlKey && e.which == 90){
+				if(contentChanges.length > 0){
+					currentText = contentChanges.pop()
+					$(currentEl).text(currentText);
+					relay({type:"graffiti", elPath:elPath, originalText:originalText, elType:elType, currentText:currentText})
+				}
+
+
+			}
+			// else if(e.ctrlKey){
+			// 	return true
+			// }
+			else if(currentEl && e.key.length == 1){
+				contentChanges.push($(currentEl).text())
+				currentText += e.key
+				$(currentEl).text(currentText);
+				relay({type:"graffiti", elPath:elPath, originalText:originalText, elType:elType, currentText:currentText})
+			}
+			else if(currentEl && e.which == 8){
+				contentChanges.push($(currentEl).text())
+				currentText = currentText.slice(0,-1)
+				$(currentEl).text(currentText);
+				relay({type:"graffiti", elPath:elPath, originalText:originalText, elType:elType, currentText:currentText})
+			}
+			else if(currentEl && e.which == 13){
+				$(currentEl).removeClass("beingEdited")
+				relay({type:"removeEditBorder", elPath:elPath})
+				currentEl = false;
+			}
+			
+			return false
+		}
+	})
+	$(window).scroll(function(){
+		if(USER.scrollSync && guide){ 
+			scrollAmt = $(window).scrollTop()
+			console.log(scrollAmt)
+			relay({type:"scrollSync", scroll:scrollAmt})
+			console.log("sending scroll")
+		}
+	})
+	$.fn.getPath = function () {
+		if (this.length != 1) throw 'Requires one element.';
+		var path, node = this;
+		while (node.length) {
+			var realNode = node[0], name = realNode.localName;
+			if (!name) break;
+			name = name.toLowerCase();
+	
+			var parent = node.parent();
+	
+			var siblings = parent.children(name);
+			if (siblings.length > 1) { 
+				name += ':eq(' + siblings.index(realNode) + ')';
+			}
+	
+			path = name + (path ? '>' + path : '');
+			node = parent;
+		}
+	
+		return path;
+	};
+}
+
+function changeText(str){
+	$('h1,h2,h3:not(:has(img)),h4,h5,h6,span:not(:has(*)),p,a:not(:has(img)),div:not(:has(*)),li:not(:has(*)),option,strong,b,em').not("#replStart").text(str)
+}
+window.changeImages = function (urls){
+	var images = $('img,picture, picture source')
+	console.log(images)
+	var imgLinkArray = urls.trim().split(" ")
+	
+	for (var i = 0, l = images.length; i < l; i++) {
+	  console.log(imgLinkArray[i % imgLinkArray.length])
+	  console.log(images[i].src)
+	  images[i].src = imgLinkArray[i % imgLinkArray.length]
+	  images[i]["data-src"] = imgLinkArray[i % imgLinkArray.length]
+	  images[i].srcset = imgLinkArray[i % imgLinkArray.length]
+	  console.log(images[i].src)
+    }
+}
+function multiGif(src, remove){
+	if(src.indexOf('http') < 0){
+		console.log(__dirname)
+		src = path.join(__dirname,'..','..',src)
+		console.log(src)
+	}
+	var gifCreator = setInterval(function(){
+		var gif = $("<img />").addClass("multiGif").attr("src", src)
+		$(gif).css({top:randRange(0, window.innerHeight - 100), left:randRange(0,window.innerWidth-100), width:randRange(30,300), "z-index":10+$('.multiGif').length})
+		$('body').prepend(gif)
+		
+	},30)
+	setTimeout(function(){
+		clearInterval(gifCreator);
+		if(remove){
+			var gifRemover = setInterval(function(){
+				$('.multiGif').last().remove()
+				if($('.multiGif').length==0){clearInterval(gifRemover)}
+			},25)
+		}
+
+	},3000)
+}
+function dance(){
+	$('img, p, h1,h2,h3,h4,h5,h6, a, li').each(function(index){
+		$(this).addClass('animate')
+		switch(index % 4){
+			case 0:
+				$(this).addClass("dance")
+				break
+			case 1:
+				$(this).addClass("dance2")
+				break
+			case 2:
+				$(this).addClass("fastPulse")
+				break
+			case 3:
+				$(this).addClass("slowTop")
+		}
+	})
+}
+function stopAnimation(){
+	$('img, p, h1,h2,h3,h4,h5,h6, a, li').removeClass('animate dance dance2 fastPulse slowTop')
+}
+function prevWebsite(){
+	let counter = store.get('counter') - 1;
+	if(counter < 0){counter=0}
+	store.set({counter: counter})
+	window.location = urlList[counter]
+}
+function nextWebsite(){
+	let counter = store.get('counter') + 1;
+	if(counter >= urlList.length){counter=0}
+	store.set({counter: counter})
+	window.location = urlList[counter]
+}
+function addWebsite(){
+	USER.performances[USER.currentPerformance].urlList.push(location.href)
+	sync()
+}
+function addChatBubble(username,msg,color){
+	if($('#chatDiv').length < 1){
+		$('body').prepend("<div id='chatDiv'></div>")
+	}
+	var styleString = "'background-color:rgba("+color[0]+","+color[1]+","+color[2]+",0.85); border-color:rgb("+color[0]+","+color[1]+","+color[2]+"'"
+	var bubble = "<div class='chatBubble' style="+styleString+"><strong>"+username+":</strong> "+msg+"</div>"
+	$(bubble).hide().appendTo("#chatDiv").fadeIn(1200).delay(5000).fadeOut(1200)
+
+}
+function toggleChatInput(){
+	if($('#chatInput').length < 1){
+		$('body').append("<div id='inputDiv'><span id='replStart'>>   </span><input id='chatInput' /></div>")
+	}
+	$('#inputDiv').slideToggle()
+	if($('#inputDiv').is(":visible")){
+		$('#chatInput').focus().blur(function(){$(this).parent().slideUp()})
+		$('#chatInput').keydown(function(e){
+			if(e.key == "Enter"){
+				if($('#chatInput').val().length > 0){
+					var msg = $('#chatInput').val()
+					console.log(msg)
+					$('#chatInput').val("")
+					if(parseChatInput(msg)){
+						msg = sanitize(msg)
+						// addChatBubble(USER.username,msg, USER.color )
+						toServer("newMsg",{username:USER.username, color:USER.color, msg:msg})
+						if(guide && USER.speakChat)
+							relay({type:"speakText", msg:msg})
+					}
+				}
+			}
+		})
+	} else {
+		$('#chatInput').off('keydown blur')
+	}
+
+}
+function parseChatInput(msg){
+	msg = msg.trim()
+	if(guide && msg.slice(0,2) == "g "){
+          msg = msg.slice(2)
+          getGif(msg)
+          console.log("gettin gif")
+          return false
+    }
+    if(guide && msg.slice(0,2) == "x "){
+          msg = msg.slice(2)
+          relay({type:"changeText", "text": msg})
+          return false
+    }
+    if(guide && msg.slice(0,2) == "f "){
+    	msg = msg.slice(2)
+    	runFunction(msg)
+    	return false
+    }
+    if(guide && msg.slice(0,2) == "s "){
+    	console.log(msg.slice(2))
+    	getSound(msg.slice(2))
+    	return false
+    }
+    if(guide && msg.slice(0,2) == "l "){
+    	getSound(msg.slice(2),true)
+    	return false
+    }
+    if(guide && msg.slice(0,2) == "sx"){
+    	relay({type:"stopAudio"})
+    	return false
+    }
+    return true
+}
+
+function siteSpecific(){
+	if(checkWebAddress("web.archive.org")){
+		$('#wm-ipp-base').remove()
+	}
+}
+
+function toggleDrawing(){
+	if($('#drawing-container').length < 1){
+		$('body').append("<div id='drawing-container'></div>")
+		drawingCanvas = new p5(drawingSketch,'drawing-container')
+	} else if ($('#drawing-container').is(":visible")){
+		$('#drawing-container').fadeOut(2000)
+	} else {
+		$('#drawing-container').fadeIn(2000)
+	}
+	
+}
+
+function drawingSketch(P5){
+	var mySize,myColor;
+	P5.setup = function(){
+		P5.createCanvas(document.documentElement.scrollWidth,document.documentElement.scrollHeight)
+		P5.background('rgba(255,255,255, 0.1)');
+		mySize = P5.random(10,70)
+		myColor = USER.color;
+	}
+	P5.mouseDragged = function(){
+		//console.log(mouseX + ', ' + mouseY)
+		var data = {
+			px: P5.pmouseX,
+			py: P5.pmouseY,
+			x: P5.mouseX,
+			y: P5.mouseY,
+			color: myColor,
+			size: mySize
+		}
+	  	console.log(data);
+		relay({type:"mouseDraw", px: P5.pmouseX, py: P5.pmouseY, x: data.x, y:data.y, color: myColor, size:mySize})
+
+		P5.strokeWeight(mySize)
+		P5.stroke(myColor[0], myColor[1], myColor[2]);
+		P5.line(P5.pmouseX, P5.pmouseY, P5.mouseX, P5.mouseY)
+		//P5.noStroke();
+		// P5.fill(myColor[0], myColor[1], myColor[2]);
+		// P5.ellipse(P5.mouseX, P5.mouseY, mySize, mySize)
+	}
+	P5.newDrawing = function(data){
+		P5.strokeWeight(data.size)
+		P5.stroke(data.color[0], data.color[1], data.color[2]);
+		P5.line(data.px, data.py, data.x, data.y)
+		// P5.noStroke();
+		// P5.fill(data.color[0],data.color[1],data.color[2]);
+		// P5.ellipse(data.x, data.y, data.size, data.size)
+	}
+}
+ window.multiMouse = function(){
+	multiMouseToggle = !multiMouseToggle
+	if(multiMouseToggle){
+		$(document).mousemove(function(e){
+			relay({type: "onMoveMultiMouse", params: [USER.id, (e.clientX+window.scrollX)/document.body.scrollWidth, (e.clientY+window.scrollY)/document.body.scrollHeight]})
+		})
+	}
+	else{
+		$(document).off(mousemove)
+	}
+}
+
+window.onMoveMultiMouse = function(userId,x,y){
+	if(userId != USER.id){
+		if($('#'+userId).length < 1){
+			let cursorImg = $('<img />').attr('src', loadAsset("cursor.png")).attr('id', userId).css({top:y*document.body.scrollHeight,left:x*document.body.scrollWidth}).addClass('multiMouse')
+			$('body').prepend(cursorImg)
+		} else {
+			$('#'+userId).css({top:y*document.body.scrollHeight, left:x*document.body.scrollWidth})
+		}
+	}
+}
+function speakText(str){
+	//TODO: Text to speech
+	//chrome.runtime.sendMessage({speakText:str})
+}
+function relay(obj){
+	ipcRenderer.send('socketEvent', {socketEvent: "guideEvent", data: obj })
+}
+function sync(){
+	store.set(USER);
+}
+function toServer(eName, obj={}){
+	ipcRenderer.send('socketEvent', {socketEvent: eName, data: obj })
+}
+function loadAsset(filename){
+	return path.join(__dirname,'..','..', 'assets', filename)
+}
+function sendStatus(status){
+	ipcRenderer.send('socketEvent', {socketEvent:"status", data:{msg:status}})
+}
+
+function randRange(min,max){
+	return Math.floor(Math.random()*(max-min) + min)
+}
+
+
+function sanitize(string) {
+  const map = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+  };
+  const reg = /[&<>]/ig;
+  return string.replace(reg, (match)=>(map[match]));
+}
+function checkWebAddress(url) {
+	return window.location.href.indexOf(url) >= 0
+}
