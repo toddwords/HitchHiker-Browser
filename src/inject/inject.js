@@ -294,7 +294,7 @@ window.changeImages = function (urls){
 function multiGif(src, remove){
 	if(src.indexOf('http') < 0){
 		console.log(__dirname)
-		src = path.join(__dirname,'..','..',src)
+		src = loadAsset(src.split('/')[1])
 		console.log(src)
 	}
 	var gifCreator = setInterval(function(){
@@ -513,7 +513,7 @@ function toServer(eName, obj={}){
 	ipcRenderer.send('socketEvent', {socketEvent: eName, data: obj })
 }
 function loadAsset(filename){
-	return path.join(__dirname,'..','..', 'assets', filename)
+	return path.join("file://",__dirname,'..','..', 'assets', filename)
 }
 function sendStatus(status){
 	ipcRenderer.send('socketEvent', {socketEvent:"status", data:{msg:status}})
