@@ -15,9 +15,11 @@ webview.addEventListener('did-finish-load', (e) => {
   webview.insertCSS(css)
   $('#nav-ctrls-url').val(webview.src)
   console.log(USER.role)
-  if(USER.role == "guide")
+  console.log(store.get('role'))
+  if(store.get('role') == "guide"){
     console.log(webview.src)
     toServer('newPage', {url:webview.src})
+  }
 })
 ipcRenderer.on('test', (e, data) => {
     console.log(data)
