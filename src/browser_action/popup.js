@@ -49,7 +49,7 @@ function init(){
 	// $('#currentRoom').html("")
 	$('#reset').click(reset)
 	if(!store.get("username")){
-		let username = "Todd"
+		let username = "electron" + store.get('id').toString();
 		// let username = prompt("What username would you like to go by?")
 		username = sanitize(username)
 		store.set('username', username)
@@ -78,7 +78,7 @@ function init(){
 			//for private rooms
 			//TODO add prompt
 			// let roomToJoin = prompt("what is the name of the room you'd like to join?")
-			let roomToJoin = 'test'
+			let roomToJoin = 'electronTest'
 			roomToJoin = roomToJoin.toLowerCase()
 			console.log(roomToJoin)
 			store.set('role', "audience") 

@@ -1,6 +1,6 @@
 {
-  "name": "hitchhiker-electron",
-  "productName": "hitchhiker-electron",
+  "name": "hitchhiker-browser",
+  "productName": "HitchHiker Browser",
   "version": "1.0.0",
   "description": "My Electron application description",
   "main": "src/main.js",
