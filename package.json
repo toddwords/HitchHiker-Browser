@@ -45,7 +45,7 @@
     }
   },
   "dependencies": {
-    "axios": "^0.19.2",
+    "axios": "^0.21.1",
     "electron-navigation": "^1.5.8",
     "electron-squirrel-startup": "^1.0.0",
     "electron-store": "^6.0.0",
